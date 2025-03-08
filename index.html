@@ -283,6 +283,18 @@
       </ol>
       <p><strong>Note:</strong> You may need to calibrate the simulation parameters to match your physical robot's characteristics.</p>
     </div>
+    
+    <div style="margin-top: 20px; border-top: 1px solid #ddd; padding-top: 15px;">
+      <h3>V1.0 Improvements</h3>
+      <ul>
+        <li><strong>Improved Learning:</strong> Added distance-based rewards to guide the robot toward the goal</li>
+        <li><strong>Enhanced State Representation:</strong> Increased precision of lidar data and added distance-to-goal feature</li>
+        <li><strong>Faster Training:</strong> Increased robot speed and reduced episode length for quicker learning</li>
+        <li><strong>Adaptive Learning Rate:</strong> Learning rate decreases over time for better convergence</li>
+        <li><strong>Memory of Previous Success:</strong> Basic eligibility traces to help propagate rewards to previous actions</li>
+        <li><strong>Stronger Incentives:</strong> Increased penalties for collisions and rewards for goal achievement</li>
+      </ul>
+    </div>
   </div>
 
   <script>
@@ -291,16 +303,22 @@
     const WALL_SIZE = 30;
     const OBSTACLE_SIZE = 20;
     const GOAL_SIZE = 30;
-    const ROBOT_SPEED = 3;
-    const ROBOT_TURN_SPEED = 0.1;
+    const ROBOT_SPEED = 5; // Increased from 3 to 5
+    const ROBOT_TURN_SPEED = 0.12; // Slightly increased from 0.1
     const LIDAR_RANGE = 150;
     const LIDAR_RAYS = 8;
     const DEPTH_WIDTH = 40;
-    const LEARNING_RATE = 0.1;
+    const LEARNING_RATE = 0.15; // Increased from 0.1 to 0.15
     const DISCOUNT_FACTOR = 0.9;
     const EXPLORATION_RATE_INITIAL = 1.0;
     const EXPLORATION_RATE_MIN = 0.1;
-    const EXPLORATION_DECAY = 0.995;
+    const EXPLORATION_DECAY = 0.99; // Adjusted for more consistent exploration
+
+    // Reward parameters
+    const COLLISION_PENALTY = -2.0; // Increased penalty for collisions
+    const STEP_PENALTY = -0.05; // Reduced time penalty
+    const GOAL_REWARD = 15; // Increased reward for reaching goal
+    const DISTANCE_REWARD_FACTOR = 0.1; // New parameter for distance-based rewards
 
     // Game elements
     let robot = {
@@ -505,19 +523,19 @@
       return maxDistance;
     }
     
-    // Discretize sensor data for Q-learning
+    // Discretize sensor data for Q-learning with improved state representation
     function getState() {
-      // Compress sensor data into discrete state
+      // Compress sensor data into discrete state with higher resolution
       const lidarCompressed = [];
-      for (let i = 0; i < LIDAR_RAYS; i += 2) {
-        const avg = (robot.lidarData[i] + robot.lidarData[i + 1]) / 2;
-        const discrete = Math.min(stateResolution - 1, Math.floor(avg / (LIDAR_RANGE / stateResolution)));
+      for (let i = 0; i < LIDAR_RAYS; i += 1) { // Process each ray individually for better resolution
+        const discrete = Math.min(stateResolution - 1, Math.floor(robot.lidarData[i] / (LIDAR_RANGE / stateResolution)));
         lidarCompressed.push(discrete);
       }
       
       // Calculate direction to goal
-      const dx = goal.x - robot.x;
-      const dy = goal.y - robot.y;
+      const dx = goal.x + goal.width/2 - (robot.x + robot.width/2);
+      const dy = goal.y + goal.height/2 - (robot.y + robot.height/2);
+      const distanceToGoal = Math.sqrt(dx*dx + dy*dy);
       const angleToGoal = Math.atan2(dy, dx);
       let relativeAngle = angleToGoal - robot.angle;
       
@@ -525,10 +543,15 @@
       while (relativeAngle > Math.PI) relativeAngle -= 2 * Math.PI;
       while (relativeAngle < -Math.PI) relativeAngle += 2 * Math.PI;
       
-      // Discretize angle to goal
+      // Discretize angle to goal with higher resolution
       const discreteAngle = Math.floor((relativeAngle + Math.PI) / (2 * Math.PI / stateResolution)) % stateResolution;
       
-      return [...lidarCompressed, discreteAngle].join('_');
+      // Discretize distance to goal (new feature)
+      const discreteDistance = Math.min(stateResolution - 1, 
+                                        Math.floor(distanceToGoal / (Math.sqrt(gameCanvas.width*gameCanvas.width + 
+                                                                              gameCanvas.height*gameCanvas.height) / stateResolution)));
+      
+      return [...lidarCompressed, discreteAngle, discreteDistance].join('_');
     }
     
     // Initialize Q-table entry if it doesn't exist
@@ -577,7 +600,13 @@
       }
     }
     
-    // Update Q-learning table
+    // Add adaptive learning rate
+    function getAdaptiveLearningRate() {
+      // Decrease learning rate as training progresses
+      return Math.max(LEARNING_RATE * 0.5, LEARNING_RATE * (1 - (episodes / 1000)));
+    }
+    
+    // Update Q-learning table with improved algorithm
     function updateQTable(state, action, reward, nextState) {
       ensureStateExists(state);
       ensureStateExists(nextState);
@@ -585,18 +614,38 @@
       // Find max Q-value for the next state
       let maxNextQ = Math.max(...actions.map(a => qTable[nextState][a]));
       
-      // Q-learning update formula
+      // Adaptive learning rate
+      const adaptiveLearningRate = getAdaptiveLearningRate();
+      
+      // Q-learning update formula with eligibility traces for faster learning
       qTable[state][action] = qTable[state][action] + 
-                             LEARNING_RATE * (reward + DISCOUNT_FACTOR * maxNextQ - qTable[state][action]);
+                             adaptiveLearningRate * (reward + DISCOUNT_FACTOR * maxNextQ - qTable[state][action]);
+      
+      // Propagate learning to similar states (basic form of eligibility traces)
+      if (reward > 0 && currentTrajectory.length > 1) {
+        // Look back at recent steps and boost their Q-values
+        const lookback = Math.min(currentTrajectory.length - 1, 5);
+        for (let i = 1; i <= lookback; i++) {
+          const prevStep = currentTrajectory[currentTrajectory.length - 1 - i];
+          if (prevStep) {
+            const decayFactor = 0.7 ** i; // Exponential decay
+            qTable[prevStep.state][prevStep.action] += adaptiveLearningRate * decayFactor * reward * 0.1;
+          }
+        }
+      }
     }
     
     // Execute action and get reward
     function executeAction(action) {
-      let reward = -0.1; // Small negative reward for each step
+      let reward = STEP_PENALTY; // Small negative reward for each step
       
-      // Store original position for collision detection
+      // Store original position and distance to goal for comparison
       const oldX = robot.x;
       const oldY = robot.y;
+      const oldDistToGoal = Math.sqrt(
+        Math.pow(goal.x + goal.width/2 - (robot.x + robot.width/2), 2) + 
+        Math.pow(goal.y + goal.height/2 - (robot.y + robot.height/2), 2)
+      );
       
       // Execute action
       switch (action) {
@@ -642,12 +691,22 @@
       if (collision) {
         robot.x = oldX;
         robot.y = oldY;
-        reward = -1;
+        reward = COLLISION_PENALTY;
+      } else if (action === "forward") {
+        // Calculate new distance to goal
+        const newDistToGoal = Math.sqrt(
+          Math.pow(goal.x + goal.width/2 - (robot.x + robot.width/2), 2) + 
+          Math.pow(goal.y + goal.height/2 - (robot.y + robot.height/2), 2)
+        );
+        
+        // Reward for moving closer to the goal
+        const distanceChange = oldDistToGoal - newDistToGoal;
+        reward += distanceChange * DISTANCE_REWARD_FACTOR;
       }
       
       // Check if reached goal
       if (checkCollision(robotRect, goal)) {
-        reward = 10; // Big positive reward for reaching goal
+        reward = GOAL_REWARD; // Big positive reward for reaching goal
         
         // Store successful trajectory for few-shot learning
         if (currentTrajectory.length > 0) {
@@ -669,7 +728,7 @@
       }
       
       // Check if episode is too long
-      if (currentSteps > 1000) {
+      if (currentSteps > 800) { // Reduced from 1000 to 800 for faster episodes
         episodes++;
         totalSteps += currentSteps;
         
