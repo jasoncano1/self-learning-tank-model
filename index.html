@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Self-Learning Robot Maze Navigator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: white;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      max-width: 800px;
+      width: 100%;
+    }
+    h1 {
+      color: #333;
+      margin-top: 0;
+    }
+    .game-container {
+      position: relative;
+      width: 600px;
+      height: 400px;
+      margin: 20px 0;
+      border: 2px solid #333;
+      overflow: hidden;
+    }
+    #gameCanvas {
+      background-color: #eee;
+    }
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 20px;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+      margin: 0 5px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    #exportBtn {
+      background-color: #9C27B0;
+    }
+    #exportBtn:hover {
+      background-color: #7B1FA2;
+    }
+    #importBtn {
+      background-color: #673AB7;
+    }
+    #importBtn:hover {
+      background-color: #512DA8;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 10;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.4);
+    }
+    .modal-content {
+      background-color: #fefefe;
+      margin: 10% auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 80%;
+      max-width: 600px;
+      border-radius: 5px;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .modal-header h2 {
+      margin: 0;
+    }
+    .close {
+      color: #aaa;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .close:hover {
+      color: black;
+    }
+    #dataTextArea {
+      width: 100%;
+      height: 200px;
+      margin-bottom: 15px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    .stats {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      margin-top: 15px;
+      background-color: #f9f9f9;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    .stat-item {
+      text-align: center;
+    }
+    .sensor-display {
+      display: flex;
+      width: 100%;
+      justify-content: space-between;
+      margin-top: 15px;
+    }
+    .sensor {
+      width: 48%;
+      background-color: #f9f9f9;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    .sensor-canvas {
+      border: 1px solid #ddd;
+      background-color: #222;
+    }
+    .episodes-container {
+      margin-top: 15px;
+      width: 100%;
+      height: 200px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      padding: 10px;
+      background-color: #f9f9f9;
+    }
+    .episode {
+      margin-bottom: 5px;
+      padding: 5px;
+      border-bottom: 1px solid #eee;
+    }
+    .success {
+      color: green;
+    }
+    .failure {
+      color: red;
+    }
+    #newMazeBtn, #resetBtn {
+      background-color: #2196F3;
+    }
+    #newMazeBtn:hover, #resetBtn:hover {
+      background-color: #0b7dda;
+    }
+    #toggleTrainingBtn {
+      background-color: #ff9800;
+    }
+    #toggleTrainingBtn:hover {
+      background-color: #e68a00;
+    }
+    #toggleTrainingBtn.paused {
+      background-color: #f44336;
+    }
+    #toggleTrainingBtn.paused:hover {
+      background-color: #da190b;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Self-Learning Robot Maze Navigator</h1>
+    <p>Watch as the robot learns to navigate through the maze using few-shot learning and simulated lidar/depth sensing!</p>
+    
+    <!-- Export Modal -->
+    <div id="exportModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Export Learned Data</h2>
+          <span class="close" id="closeExportModal">&times;</span>
+        </div>
+        <p>Copy this data to transfer the robot's knowledge to a physical robot:</p>
+        <textarea id="dataTextArea" readonly></textarea>
+        <button id="copyDataBtn">Copy to Clipboard</button>
+        <button id="downloadBtn">Download as JSON</button>
+      </div>
+    </div>
+    
+    <!-- Import Modal -->
+    <div id="importModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Import Learned Data</h2>
+          <span class="close" id="closeImportModal">&times;</span>
+        </div>
+        <p>Paste previously exported data to restore the robot's knowledge:</p>
+        <textarea id="importDataTextArea" placeholder="Paste JSON data here..."></textarea>
+        <input type="file" id="fileInput" accept=".json" style="margin-top: 10px;">
+        <button id="loadDataBtn" style="margin-top: 10px;">Load Data</button>
+      </div>
+    </div>
+    
+    <div class="controls">
+      <button id="startBtn">Start</button>
+      <button id="toggleTrainingBtn">Pause Training</button>
+      <button id="newMazeBtn">New Maze</button>
+      <button id="resetBtn">Reset Learning</button>
+      <button id="exportBtn">Export Data</button>
+      <button id="importBtn">Import Data</button>
+    </div>
+    
+    <div class="game-container">
+      <canvas id="gameCanvas" width="600" height="400"></canvas>
+    </div>
+    
+    <div class="stats">
+      <div class="stat-item">
+        <strong>Episodes:</strong> <span id="episodeCount">0</span>
+      </div>
+      <div class="stat-item">
+        <strong>Success Rate:</strong> <span id="successRate">0%</span>
+      </div>
+      <div class="stat-item">
+        <strong>Avg Steps:</strong> <span id="avgSteps">0</span>
+      </div>
+      <div class="stat-item">
+        <strong>Learning Mode:</strong> <span id="learningMode">Few-shot</span>
+      </div>
+    </div>
+    
+    <div class="sensor-display">
+      <div class="sensor">
+        <h3>Lidar Sensor</h3>
+        <canvas id="lidarCanvas" class="sensor-canvas" width="280" height="150"></canvas>
+        <div style="margin-top: 5px;">
+          <button id="toggleLidarViewBtn" style="width: 100%; background-color: #333; font-size: 12px;">Switch to 3D Point Cloud</button>
+        </div>
+      </div>
+      <div class="sensor">
+        <h3>Depth Camera</h3>
+        <canvas id="depthCanvas" class="sensor-canvas" width="280" height="150"></canvas>
+      </div>
+    </div>
+    
+    <h3>Training Episodes</h3>
+    <div class="episodes-container" id="episodesLog">
+      <!-- Episodes will be logged here -->
+    </div>
+    
+    <div style="margin-top: 20px; border-top: 1px solid #ddd; padding-top: 15px;">
+      <h3>Physical Robot Implementation Notes</h3>
+      <p>To implement this learning model on a physical robot:</p>
+      <ol>
+        <li>Train the robot in this simulation until it performs well</li>
+        <li>Click "Export Data" to save the learned knowledge</li>
+        <li>On your physical robot system, implement a similar state representation:
+          <ul>
+            <li>Process lidar readings to match the simulation's ray configuration</li>
+            <li>Configure depth camera data to match the depth width used here</li>
+            <li>Implement the same discretization approach for sensor data</li>
+          </ul>
+        </li>
+        <li>Load the exported JSON data with the Q-table and successful trajectories</li>
+        <li>Implement the same action selection logic, with exploration rate set lower for deployment</li>
+      </ol>
+      <p><strong>Note:</strong> You may need to calibrate the simulation parameters to match your physical robot's characteristics.</p>
+    </div>
+  </div>
+
+  <script>
+    // Game constants
+    const ROBOT_SIZE = 20;
+    const WALL_SIZE = 30;
+    const OBSTACLE_SIZE = 20;
+    const GOAL_SIZE = 30;
+    const ROBOT_SPEED = 3;
+    const ROBOT_TURN_SPEED = 0.1;
+    const LIDAR_RANGE = 150;
+    const LIDAR_RAYS = 8;
+    const DEPTH_WIDTH = 40;
+    const LEARNING_RATE = 0.1;
+    const DISCOUNT_FACTOR = 0.9;
+    const EXPLORATION_RATE_INITIAL = 1.0;
+    const EXPLORATION_RATE_MIN = 0.1;
+    const EXPLORATION_DECAY = 0.995;
+
+    // Game elements
+    let robot = {
+      x: 50,
+      y: 50,
+      angle: 0,
+      width: ROBOT_SIZE,
+      height: ROBOT_SIZE,
+      lidarData: Array(LIDAR_RAYS).fill(LIDAR_RANGE),
+      depthData: Array(DEPTH_WIDTH).fill(LIDAR_RANGE),
+    };
+    
+    let goal = { x: 550, y: 350, width: GOAL_SIZE, height: GOAL_SIZE };
+    let walls = [];
+    let obstacles = [];
+    
+    // Training variables
+    let episodes = 0;
+    let successfulEpisodes = 0;
+    let totalSteps = 0;
+    let currentSteps = 0;
+    let isTraining = false;
+    let isPaused = false;
+    let explorationRate = EXPLORATION_RATE_INITIAL;
+    
+    // Few-shot learning - store successful trajectories
+    let successfulTrajectories = [];
+    let currentTrajectory = [];
+    
+    // Q-learning table (simplified state space based on sensor data)
+    const stateResolution = 4; // number of discrete values for each sensor
+    const actions = ["forward", "left", "right"];
+    let qTable = {};
+    
+    // Game loop variables
+    let animationId;
+    let lastTimestamp = 0;
+    const targetFPS = 60;
+    const frameTime = 1000 / targetFPS;
+    
+    // Get canvas and context
+    const gameCanvas = document.getElementById('gameCanvas');
+    const gameCtx = gameCanvas.getContext('2d');
+    const lidarCanvas = document.getElementById('lidarCanvas');
+    const lidarCtx = lidarCanvas.getContext('2d');
+    const depthCanvas = document.getElementById('depthCanvas');
+    const depthCtx = depthCanvas.getContext('2d');
+    
+    // UI elements
+    const startBtn = document.getElementById('startBtn');
+    const toggleTrainingBtn = document.getElementById('toggleTrainingBtn');
+    const newMazeBtn = document.getElementById('newMazeBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const episodeCountEl = document.getElementById('episodeCount');
+    const successRateEl = document.getElementById('successRate');
+    const avgStepsEl = document.getElementById('avgSteps');
+    const episodesLogEl = document.getElementById('episodesLog');
+    
+    // Initialize the game
+    function initGame() {
+      // Create walls (border)
+      walls = [
+        { x: 0, y: 0, width: gameCanvas.width, height: WALL_SIZE }, // Top
+        { x: 0, y: gameCanvas.height - WALL_SIZE, width: gameCanvas.width, height: WALL_SIZE }, // Bottom
+        { x: 0, y: 0, width: WALL_SIZE, height: gameCanvas.height }, // Left
+        { x: gameCanvas.width - WALL_SIZE, y: 0, width: WALL_SIZE, height: gameCanvas.height } // Right
+      ];
+      
+      generateMaze();
+      resetEpisode();
+    }
+    
+    // Generate a random maze
+    function generateMaze() {
+      obstacles = [];
+      
+      // Generate random walls
+      const numObstacles = 15;
+      for (let i = 0; i < numObstacles; i++) {
+        let isOverlapping;
+        let newObstacle;
+        
+        do {
+          isOverlapping = false;
+          const x = Math.floor(Math.random() * (gameCanvas.width - WALL_SIZE * 2 - OBSTACLE_SIZE)) + WALL_SIZE;
+          const y = Math.floor(Math.random() * (gameCanvas.height - WALL_SIZE * 2 - OBSTACLE_SIZE)) + WALL_SIZE;
+          
+          newObstacle = { 
+            x: x, 
+            y: y, 
+            width: OBSTACLE_SIZE + Math.floor(Math.random() * 30),
+            height: OBSTACLE_SIZE + Math.floor(Math.random() * 30)
+          };
+          
+          // Check overlap with robot start position
+          if (checkCollision(newObstacle, {
+            x: 50 - ROBOT_SIZE * 2,
+            y: 50 - ROBOT_SIZE * 2,
+            width: ROBOT_SIZE * 4,
+            height: ROBOT_SIZE * 4
+          })) {
+            isOverlapping = true;
+            continue;
+          }
+          
+          // Check overlap with goal
+          if (checkCollision(newObstacle, {
+            x: goal.x - GOAL_SIZE,
+            y: goal.y - GOAL_SIZE,
+            width: GOAL_SIZE * 2,
+            height: GOAL_SIZE * 2
+          })) {
+            isOverlapping = true;
+            continue;
+          }
+          
+          // Check overlap with other obstacles
+          for (const obstacle of obstacles) {
+            if (checkCollision(newObstacle, {
+              x: obstacle.x - OBSTACLE_SIZE,
+              y: obstacle.y - OBSTACLE_SIZE,
+              width: obstacle.width + OBSTACLE_SIZE * 2,
+              height: obstacle.height + OBSTACLE_SIZE * 2
+            })) {
+              isOverlapping = true;
+              break;
+            }
+          }
+        } while (isOverlapping);
+        
+        obstacles.push(newObstacle);
+      }
+    }
+    
+    // Reset robot position and start a new episode
+    function resetEpisode() {
+      robot.x = 50;
+      robot.y = 50;
+      robot.angle = 0;
+      currentSteps = 0;
+      currentTrajectory = [];
+      updateSensors();
+    }
+    
+    // Check collision between two rectangles
+    function checkCollision(rect1, rect2) {
+      return (
+        rect1.x < rect2.x + rect2.width &&
+        rect1.x + rect1.width > rect2.x &&
+        rect1.y < rect2.y + rect2.height &&
+        rect1.y + rect1.height > rect2.y
+      );
+    }
+    
+    // Update lidar and depth sensor data
+    function updateSensors() {
+      // Lidar sensor (rays in different directions)
+      for (let i = 0; i < LIDAR_RAYS; i++) {
+        const angle = robot.angle + (i - LIDAR_RAYS / 2) * (Math.PI / (LIDAR_RAYS - 1));
+        robot.lidarData[i] = castRay(robot.x + ROBOT_SIZE / 2, robot.y + ROBOT_SIZE / 2, angle, LIDAR_RANGE);
+      }
+      
+      // Depth camera (forward-facing rays)
+      for (let i = 0; i < DEPTH_WIDTH; i++) {
+        const angle = robot.angle + (i - DEPTH_WIDTH / 2) * (Math.PI / (DEPTH_WIDTH * 2));
+        robot.depthData[i] = castRay(robot.x + ROBOT_SIZE / 2, robot.y + ROBOT_SIZE / 2, angle, LIDAR_RANGE);
+      }
+    }
+    
+    // Cast a ray and return distance to obstacle
+    function castRay(x, y, angle, maxDistance) {
+      const rayStep = 2;
+      let distance = 0;
+      
+      while (distance < maxDistance) {
+        const rayX = x + Math.cos(angle) * distance;
+        const rayY = y + Math.sin(angle) * distance;
+        
+        // Check collision with walls
+        for (const wall of walls) {
+          if (
+            rayX >= wall.x && rayX <= wall.x + wall.width &&
+            rayY >= wall.y && rayY <= wall.y + wall.height
+          ) {
+            return distance;
+          }
+        }
+        
+        // Check collision with obstacles
+        for (const obstacle of obstacles) {
+          if (
+            rayX >= obstacle.x && rayX <= obstacle.x + obstacle.width &&
+            rayY >= obstacle.y && rayY <= obstacle.y + obstacle.height
+          ) {
+            return distance;
+          }
+        }
+        
+        distance += rayStep;
+      }
+      
+      return maxDistance;
+    }
+    
+    // Discretize sensor data for Q-learning
+    function getState() {
+      // Compress sensor data into discrete state
+      const lidarCompressed = [];
+      for (let i = 0; i < LIDAR_RAYS; i += 2) {
+        const avg = (robot.lidarData[i] + robot.lidarData[i + 1]) / 2;
+        const discrete = Math.min(stateResolution - 1, Math.floor(avg / (LIDAR_RANGE / stateResolution)));
+        lidarCompressed.push(discrete);
+      }
+      
+      // Calculate direction to goal
+      const dx = goal.x - robot.x;
+      const dy = goal.y - robot.y;
+      const angleToGoal = Math.atan2(dy, dx);
+      let relativeAngle = angleToGoal - robot.angle;
+      
+      // Normalize angle
+      while (relativeAngle > Math.PI) relativeAngle -= 2 * Math.PI;
+      while (relativeAngle < -Math.PI) relativeAngle += 2 * Math.PI;
+      
+      // Discretize angle to goal
+      const discreteAngle = Math.floor((relativeAngle + Math.PI) / (2 * Math.PI / stateResolution)) % stateResolution;
+      
+      return [...lidarCompressed, discreteAngle].join('_');
+    }
+    
+    // Initialize Q-table entry if it doesn't exist
+    function ensureStateExists(state) {
+      if (!qTable[state]) {
+        qTable[state] = {};
+        for (const action of actions) {
+          qTable[state][action] = 0;
+        }
+      }
+    }
+    
+    // Choose action based on current policy (with exploration)
+    function chooseAction() {
+      const state = getState();
+      ensureStateExists(state);
+      
+      // First check if we can use few-shot examples
+      if (successfulTrajectories.length > 0 && Math.random() < 0.3) {
+        // Find similar states in successful trajectories
+        for (const trajectory of successfulTrajectories) {
+          for (const step of trajectory) {
+            if (step.state === state) {
+              return step.action;
+            }
+          }
+        }
+      }
+      
+      // Exploration vs exploitation
+      if (Math.random() < explorationRate) {
+        return actions[Math.floor(Math.random() * actions.length)];
+      } else {
+        // Exploit - choose the best action
+        let bestAction = actions[0];
+        let bestValue = qTable[state][bestAction];
+        
+        for (const action of actions) {
+          if (qTable[state][action] > bestValue) {
+            bestValue = qTable[state][action];
+            bestAction = action;
+          }
+        }
+        
+        return bestAction;
+      }
+    }
+    
+    // Update Q-learning table
+    function updateQTable(state, action, reward, nextState) {
+      ensureStateExists(state);
+      ensureStateExists(nextState);
+      
+      // Find max Q-value for the next state
+      let maxNextQ = Math.max(...actions.map(a => qTable[nextState][a]));
+      
+      // Q-learning update formula
+      qTable[state][action] = qTable[state][action] + 
+                             LEARNING_RATE * (reward + DISCOUNT_FACTOR * maxNextQ - qTable[state][action]);
+    }
+    
+    // Execute action and get reward
+    function executeAction(action) {
+      let reward = -0.1; // Small negative reward for each step
+      
+      // Store original position for collision detection
+      const oldX = robot.x;
+      const oldY = robot.y;
+      
+      // Execute action
+      switch (action) {
+        case "forward":
+          robot.x += Math.cos(robot.angle) * ROBOT_SPEED;
+          robot.y += Math.sin(robot.angle) * ROBOT_SPEED;
+          break;
+        case "left":
+          robot.angle -= ROBOT_TURN_SPEED;
+          break;
+        case "right":
+          robot.angle += ROBOT_TURN_SPEED;
+          break;
+      }
+      
+      // Collision detection with walls and obstacles
+      const robotRect = {
+        x: robot.x,
+        y: robot.y,
+        width: ROBOT_SIZE,
+        height: ROBOT_SIZE
+      };
+      
+      let collision = false;
+      
+      // Check walls
+      for (const wall of walls) {
+        if (checkCollision(robotRect, wall)) {
+          collision = true;
+          break;
+        }
+      }
+      
+      // Check obstacles
+      for (const obstacle of obstacles) {
+        if (checkCollision(robotRect, obstacle)) {
+          collision = true;
+          break;
+        }
+      }
+      
+      // If collision, revert position and give negative reward
+      if (collision) {
+        robot.x = oldX;
+        robot.y = oldY;
+        reward = -1;
+      }
+      
+      // Check if reached goal
+      if (checkCollision(robotRect, goal)) {
+        reward = 10; // Big positive reward for reaching goal
+        
+        // Store successful trajectory for few-shot learning
+        if (currentTrajectory.length > 0) {
+          successfulTrajectories.push([...currentTrajectory]);
+          if (successfulTrajectories.length > 5) {
+            // Keep only the most recent successful trajectories
+            successfulTrajectories.shift();
+          }
+        }
+        
+        // Log episode
+        episodes++;
+        successfulEpisodes++;
+        totalSteps += currentSteps;
+        
+        logEpisode(true);
+        updateStats();
+        resetEpisode();
+      }
+      
+      // Check if episode is too long
+      if (currentSteps > 1000) {
+        episodes++;
+        totalSteps += currentSteps;
+        
+        logEpisode(false);
+        updateStats();
+        resetEpisode();
+      }
+      
+      return reward;
+    }
+    
+    // Log episode outcome
+    function logEpisode(success) {
+      const episodeEl = document.createElement('div');
+      episodeEl.className = `episode ${success ? 'success' : 'failure'}`;
+      episodeEl.textContent = `Episode ${episodes}: ${success ? 'Success' : 'Failed'} - ${currentSteps} steps`;
+      episodesLogEl.insertBefore(episodeEl, episodesLogEl.firstChild);
+      
+      // Limit number of logged episodes
+      if (episodesLogEl.children.length > 50) {
+        episodesLogEl.removeChild(episodesLogEl.lastChild);
+      }
+    }
+    
+    // Update statistics
+    function updateStats() {
+      episodeCountEl.textContent = episodes;
+      successRateEl.textContent = `${Math.round((successfulEpisodes / episodes) * 100) || 0}%`;
+      avgStepsEl.textContent = Math.round(totalSteps / episodes) || 0;
+      
+      // Decay exploration rate
+      explorationRate = Math.max(EXPLORATION_RATE_MIN, explorationRate * EXPLORATION_DECAY);
+    }
+    
+    // Training step
+    function trainStep() {
+      if (!isTraining || isPaused) return;
+      
+      const state = getState();
+      const action = chooseAction();
+      const reward = executeAction(action);
+      
+      currentSteps++;
+      
+      // Store step in current trajectory
+      currentTrajectory.push({ state, action });
+      
+      // Update sensors
+      updateSensors();
+      
+      // Update Q-table
+      const nextState = getState();
+      updateQTable(state, action, reward, nextState);
+    }
+    
+    // Draw game state
+    function drawGame() {
+      // Clear canvas
+      gameCtx.fillStyle = "#eee";
+      gameCtx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+      
+      // Draw walls
+      gameCtx.fillStyle = "#333";
+      for (const wall of walls) {
+        gameCtx.fillRect(wall.x, wall.y, wall.width, wall.height);
+      }
+      
+      // Draw obstacles
+      gameCtx.fillStyle = "#777";
+      for (const obstacle of obstacles) {
+        gameCtx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+      }
+      
+      // Draw goal
+      gameCtx.fillStyle = "#4CAF50";
+      gameCtx.fillRect(goal.x, goal.y, goal.width, goal.height);
+      gameCtx.fillStyle = "#fff";
+      gameCtx.font = "14px Arial";
+      gameCtx.fillText("GOAL", goal.x + 5, goal.y + goal.height / 2 + 5);
+      
+      // Draw robot
+      gameCtx.save();
+      gameCtx.translate(robot.x + robot.width / 2, robot.y + robot.height / 2);
+      gameCtx.rotate(robot.angle);
+      gameCtx.fillStyle = "#2196F3";
+      gameCtx.fillRect(-robot.width / 2, -robot.height / 2, robot.width, robot.height);
+      
+      // Draw direction indicator
+      gameCtx.fillStyle = "#ff0";
+      gameCtx.beginPath();
+      gameCtx.moveTo(robot.width / 2, 0);
+      gameCtx.lineTo(robot.width / 2 + 10, 0);
+      gameCtx.stroke();
+      gameCtx.restore();
+      
+      // Draw sensor visualizations
+      drawLidarSensor();
+      drawDepthSensor();
+    }
+    
+    // Lidar visualization mode: 2D or 3D
+    let lidarViewMode = "2D";
+    
+    // Draw lidar sensor visualization
+    function drawLidarSensor() {
+      // Clear canvas
+      lidarCtx.fillStyle = "#222";
+      lidarCtx.fillRect(0, 0, lidarCanvas.width, lidarCanvas.height);
+      
+      if (lidarViewMode === "2D") {
+        draw2DLidar();
+      } else {
+        draw3DLidar();
+      }
+    }
+    
+    // Draw 2D traditional lidar view
+    function draw2DLidar() {
+      const centerX = lidarCanvas.width / 2;
+      const centerY = lidarCanvas.height - 20;
+      const scale = 0.7; // Scale to fit on canvas
+      
+      // Draw lidar rays
+      for (let i = 0; i < LIDAR_RAYS; i++) {
+        const angle = (i - LIDAR_RAYS / 2) * (Math.PI / (LIDAR_RAYS - 1));
+        const distance = robot.lidarData[i];
+        const normalizedDistance = distance / LIDAR_RANGE;
+        
+        // Calculate endpoint of ray
+        const rayLength = normalizedDistance * lidarCanvas.height * scale;
+        const endX = centerX + Math.cos(angle) * rayLength;
+        const endY = centerY - Math.sin(angle) * rayLength;
+        
+        // Draw ray
+        lidarCtx.strokeStyle = `rgb(${255 - normalizedDistance * 255}, ${normalizedDistance * 255}, 0)`;
+        lidarCtx.beginPath();
+        lidarCtx.moveTo(centerX, centerY);
+        lidarCtx.lineTo(endX, endY);
+        lidarCtx.stroke();
+        
+        // Draw endpoint
+        lidarCtx.fillStyle = `rgb(${255 - normalizedDistance * 255}, ${normalizedDistance * 255}, 0)`;
+        lidarCtx.beginPath();
+        lidarCtx.arc(endX, endY, 3, 0, Math.PI * 2);
+        lidarCtx.fill();
+      }
+      
+      // Draw robot position
+      lidarCtx.fillStyle = "#2196F3";
+      lidarCtx.beginPath();
+      lidarCtx.arc(centerX, centerY, 5, 0, Math.PI * 2);
+      lidarCtx.fill();
+    }
+    
+    // Draw 3D point cloud lidar visualization
+    function draw3DLidar() {
+      const centerX = lidarCanvas.width / 2;
+      const centerY = lidarCanvas.height / 2;
+      
+      // Generate more interpolated points for smoother point cloud
+      const interpolatedPoints = generateInterpolatedLidarPoints();
+      
+      // Draw perspective grid (floor)
+      drawPerspectiveGrid();
+      
+      // Draw robot perspective position
+      lidarCtx.fillStyle = "#2196F3";
+      lidarCtx.beginPath();
+      lidarCtx.arc(centerX, centerY + 40, 8, 0, Math.PI * 2);
+      lidarCtx.fill();
+      
+      // Draw point cloud
+      for (const point of interpolatedPoints) {
+        const { x, y, z, distance } = point;
+        
+        // Apply perspective projection
+        const scale = 1000 / (1000 + z);
+        const projectedX = centerX + x * scale;
+        const projectedY = centerY + y * scale;
+        
+        // Calculate point size based on distance (closer = larger)
+        const pointSize = Math.max(1, 5 * (1 - distance / LIDAR_RANGE));
+        
+        // Color based on distance
+        const normalizedDistance = distance / LIDAR_RANGE;
+        lidarCtx.fillStyle = `rgb(${255 - normalizedDistance * 255}, ${normalizedDistance * 255}, 0)`;
+        
+        // Draw point
+        lidarCtx.beginPath();
+        lidarCtx.arc(projectedX, projectedY, pointSize, 0, Math.PI * 2);
+        lidarCtx.fill();
+      }
+      
+      // Draw field of view lines
+      lidarCtx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+      lidarCtx.beginPath();
+      lidarCtx.moveTo(centerX, centerY + 40);
+      lidarCtx.lineTo(centerX - 100, centerY - 50);
+      lidarCtx.stroke();
+      
+      lidarCtx.beginPath();
+      lidarCtx.moveTo(centerX, centerY + 40);
+      lidarCtx.lineTo(centerX + 100, centerY - 50);
+      lidarCtx.stroke();
+    }
+    
+    // Generate interpolated points for smoother 3D visualization
+    function generateInterpolatedLidarPoints() {
+      const points = [];
+      const numInterpolatedPoints = LIDAR_RAYS * 5; // 5x more points for smoother visualization
+      
+      for (let i = 0; i < numInterpolatedPoints; i++) {
+        // Interpolated angle
+        const angleRatio = i / (numInterpolatedPoints - 1);
+        const angle = (angleRatio - 0.5) * Math.PI;
+        
+        // Find the two closest original lidar readings
+        const lidarIndex = angleRatio * (LIDAR_RAYS - 1);
+        const lidarIndex1 = Math.floor(lidarIndex);
+        const lidarIndex2 = Math.min(LIDAR_RAYS - 1, lidarIndex1 + 1);
+        const indexFraction = lidarIndex - lidarIndex1;
+        
+        // Interpolate distance between the two readings
+        let distance;
+        if (lidarIndex1 === lidarIndex2) {
+          distance = robot.lidarData[lidarIndex1];
+        } else {
+          distance = robot.lidarData[lidarIndex1] * (1 - indexFraction) + 
+                    robot.lidarData[lidarIndex2] * indexFraction;
+        }
+        
+        // Add some randomness for more realistic point cloud
+        const jitter = (Math.random() - 0.5) * 5;
+        const jitteredDistance = Math.max(0, distance + jitter);
+        
+        // Convert to 3D coordinates
+        // We're making a pseudo-3D effect: x and y are on the horizontal plane, z is depth
+        const x = Math.cos(angle) * jitteredDistance * 0.8;
+        const y = 0; // We'll adjust this with perspective
+        const z = Math.sin(angle) * jitteredDistance * 0.8;
+        
+        points.push({ x, y, z, distance: jitteredDistance });
+      }
+      
+      // Add some vertical distribution of points (floor and ceiling points)
+      const numVerticalPoints = 50;
+      for (let i = 0; i < numVerticalPoints; i++) {
+        // Random x, z position from existing points
+        const basePoint = points[Math.floor(Math.random() * points.length)];
+        
+        // Adjust vertical position (randomly above or below)
+        const verticalJitter = (Math.random() * 50) - 25;
+        
+        points.push({
+          x: basePoint.x * (0.8 + Math.random() * 0.4),
+          y: verticalJitter,
+          z: basePoint.z,
+          distance: basePoint.distance
+        });
+      }
+      
+      return points;
+    }
+    
+    // Draw a perspective grid to add depth to the 3D visualization
+    function drawPerspectiveGrid() {
+      const centerX = lidarCanvas.width / 2;
+      const centerY = lidarCanvas.height / 2;
+      
+      // Draw floor grid
+      lidarCtx.strokeStyle = "rgba(50, 50, 80, 0.5)";
+      
+      // Horizontal lines
+      for (let z = 100; z < 500; z += 100) {
+        const scale = 1000 / (1000 + z);
+        const y = centerY + 50 * scale;
+        
+        lidarCtx.beginPath();
+        lidarCtx.moveTo(centerX - 100 * scale, y);
+        lidarCtx.lineTo(centerX + 100 * scale, y);
+        lidarCtx.stroke();
+      }
+      
+      // Vertical lines
+      for (let x = -100; x <= 100; x += 50) {
+        lidarCtx.beginPath();
+        
+        // Start point (closer)
+        const scale1 = 1000 / (1000 + 100);
+        const projectedX1 = centerX + x * scale1;
+        const projectedY1 = centerY + 50 * scale1;
+        
+        // End point (further)
+        const scale2 = 1000 / (1000 + 500);
+        const projectedX2 = centerX + x * scale2;
+        const projectedY2 = centerY + 50 * scale2;
+        
+        lidarCtx.moveTo(projectedX1, projectedY1);
+        lidarCtx.lineTo(projectedX2, projectedY2);
+        lidarCtx.stroke();
+      }
+    }
+    
+    // Draw depth sensor visualization
+    function drawDepthSensor() {
+      // Clear canvas
+      depthCtx.fillStyle = "#222";
+      depthCtx.fillRect(0, 0, depthCanvas.width, depthCanvas.height);
+      
+      // Draw depth data as a bar chart
+      const barWidth = depthCanvas.width / DEPTH_WIDTH;
+      
+      for (let i = 0; i < DEPTH_WIDTH; i++) {
+        const normalizedDistance = robot.depthData[i] / LIDAR_RANGE;
+        const barHeight = normalizedDistance * depthCanvas.height;
+        
+        depthCtx.fillStyle = `rgb(${255 - normalizedDistance * 255}, ${normalizedDistance * 255}, 0)`;
+        depthCtx.fillRect(
+          i * barWidth, 
+          depthCanvas.height - barHeight, 
+          barWidth, 
+          barHeight
+        );
+      }
+      
+      // Draw center line
+      depthCtx.strokeStyle = "#fff";
+      depthCtx.beginPath();
+      depthCtx.moveTo(depthCanvas.width / 2, 0);
+      depthCtx.lineTo(depthCanvas.width / 2, depthCanvas.height);
+      depthCtx.stroke();
+    }
+    
+    // Game loop
+    function gameLoop(timestamp) {
+      const elapsed = timestamp - lastTimestamp;
+      
+      if (elapsed > frameTime) {
+        lastTimestamp = timestamp;
+        
+        // Update game state
+        trainStep();
+        
+        // Render game
+        drawGame();
+      }
+      
+      animationId = requestAnimationFrame(gameLoop);
+    }
+    
+    // Export learned data
+    function exportData() {
+      // Create export object with all learning data
+      const exportObj = {
+        version: "1.0",
+        timestamp: new Date().toISOString(),
+        stats: {
+          episodes: episodes,
+          successfulEpisodes: successfulEpisodes,
+          successRate: (successfulEpisodes / episodes) || 0,
+          totalSteps: totalSteps,
+          avgSteps: (totalSteps / episodes) || 0
+        },
+        learning: {
+          qTable: qTable,
+          successfulTrajectories: successfulTrajectories
+        },
+        config: {
+          lidarRays: LIDAR_RAYS,
+          depthWidth: DEPTH_WIDTH,
+          stateResolution: stateResolution
+        }
+      };
+      
+      return JSON.stringify(exportObj, null, 2);
+    }
+    
+    // Import learned data
+    function importData(jsonData) {
+      try {
+        const data = JSON.parse(jsonData);
+        
+        // Validate data format
+        if (!data.learning || !data.learning.qTable) {
+          throw new Error("Invalid data format: missing Q-table");
+        }
+        
+        // Import learning data
+        qTable = data.learning.qTable;
+        
+        // Import trajectories if available
+        if (data.learning.successfulTrajectories) {
+          successfulTrajectories = data.learning.successfulTrajectories;
+        }
+        
+        // Update stats if available
+        if (data.stats) {
+          episodes = data.stats.episodes || 0;
+          successfulEpisodes = data.stats.successfulEpisodes || 0;
+          totalSteps = data.stats.totalSteps || 0;
+          updateStats();
+        }
+        
+        // Check configuration compatibility
+        if (data.config) {
+          const configMsg = [];
+          
+          if (data.config.lidarRays !== LIDAR_RAYS) {
+            configMsg.push(`Lidar rays: imported=${data.config.lidarRays}, current=${LIDAR_RAYS}`);
+          }
+          if (data.config.depthWidth !== DEPTH_WIDTH) {
+            configMsg.push(`Depth width: imported=${data.config.depthWidth}, current=${DEPTH_WIDTH}`);
+          }
+          if (data.config.stateResolution !== stateResolution) {
+            configMsg.push(`State resolution: imported=${data.config.stateResolution}, current=${stateResolution}`);
+          }
+          
+          if (configMsg.length > 0) {
+            alert("Configuration differences detected (data still imported):\n" + configMsg.join("\n"));
+          }
+        }
+        
+        return true;
+      } catch (e) {
+        console.error("Error importing data:", e);
+        alert("Error importing data: " + e.message);
+        return false;
+      }
+    }
+    
+    // Event listeners
+    startBtn.addEventListener('click', () => {
+      if (!isTraining) {
+        isTraining = true;
+        startBtn.disabled = true;
+        gameLoop(0);
+      }
+    });
+    
+    toggleTrainingBtn.addEventListener('click', () => {
+      isPaused = !isPaused;
+      toggleTrainingBtn.textContent = isPaused ? "Resume Training" : "Pause Training";
+      toggleTrainingBtn.classList.toggle("paused", isPaused);
+    });
+    
+    newMazeBtn.addEventListener('click', () => {
+      generateMaze();
+      resetEpisode();
+    });
+    
+    resetBtn.addEventListener('click', () => {
+      if (confirm("Are you sure you want to reset all learning data?")) {
+        episodes = 0;
+        successfulEpisodes = 0;
+        totalSteps = 0;
+        currentSteps = 0;
+        explorationRate = EXPLORATION_RATE_INITIAL;
+        qTable = {};
+        successfulTrajectories = [];
+        currentTrajectory = [];
+        updateStats();
+        episodesLogEl.innerHTML = '';
+        resetEpisode();
+      }
+    });
+    
+    // Export button and modal handling
+    const exportBtn = document.getElementById('exportBtn');
+    const exportModal = document.getElementById('exportModal');
+    const closeExportModal = document.getElementById('closeExportModal');
+    const dataTextArea = document.getElementById('dataTextArea');
+    const copyDataBtn = document.getElementById('copyDataBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    
+    exportBtn.addEventListener('click', () => {
+      dataTextArea.value = exportData();
+      exportModal.style.display = "block";
+    });
+    
+    closeExportModal.addEventListener('click', () => {
+      exportModal.style.display = "none";
+    });
+    
+    copyDataBtn.addEventListener('click', () => {
+      dataTextArea.select();
+      document.execCommand('copy');
+      alert('Data copied to clipboard!');
+    });
+    
+    downloadBtn.addEventListener('click', () => {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(dataTextArea.value);
+      const downloadAnchorNode = document.createElement('a');
+      downloadAnchorNode.setAttribute("href", dataStr);
+      downloadAnchorNode.setAttribute("download", "robot_learning_data.json");
+      document.body.appendChild(downloadAnchorNode);
+      downloadAnchorNode.click();
+      downloadAnchorNode.remove();
+    });
+    
+    // Import button and modal handling
+    const importBtn = document.getElementById('importBtn');
+    const importModal = document.getElementById('importModal');
+    const closeImportModal = document.getElementById('closeImportModal');
+    const importDataTextArea = document.getElementById('importDataTextArea');
+    const fileInput = document.getElementById('fileInput');
+    const loadDataBtn = document.getElementById('loadDataBtn');
+    
+    importBtn.addEventListener('click', () => {
+      importModal.style.display = "block";
+    });
+    
+    closeImportModal.addEventListener('click', () => {
+      importModal.style.display = "none";
+    });
+    
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          importDataTextArea.value = e.target.result;
+        };
+        reader.readAsText(file);
+      }
+    });
+    
+    loadDataBtn.addEventListener('click', () => {
+      if (importDataTextArea.value.trim() === '') {
+        alert('Please paste data or select a file first.');
+        return;
+      }
+      
+      if (importData(importDataTextArea.value)) {
+        alert('Data imported successfully!');
+        importModal.style.display = "none";
+      }
+    });
+    
+    // Initialize the game
+    initGame();
+    updateSensors();
+    drawGame();
+  </script>
+</body>
+</html>
